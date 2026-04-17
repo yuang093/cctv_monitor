@@ -399,68 +399,33 @@ if page == "📊 即時流量":
     
     st.divider()
     
-    # 刪除記錄功能
-    st.subheader("🗑️ 資料管理")
+    # 資料庫統計資訊
+    st.subheader("📊 資料庫資訊")
     
-    # 取得資料庫統計
-    from database import get_record_count, delete_stream_logs
+    from database import get_record_count
     db_stats = get_record_count()
     
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"""
-        <div style="padding: 10px; background: #2c2c54; border-radius: 8px; color: #fff;">
-            <div style="font-size: 11px; color: #a0a0a0;">📊 資料庫統計</div>
-            <div style="font-size: 14px; margin-top: 5px;">總記錄: <strong style="color: #00D4AA;">{db_stats['total']:,}</strong> 筆</div>
-            <div style="font-size: 10px; color: #a0a0a0; margin-top: 3px;">
-                時間範圍: {db_stats['earliest'][:10] if db_stats['earliest'] else 'N/A'} ~ {db_stats['latest'][:10] if db_stats['latest'] else 'N/A'}
-            </div>
+        <div style="padding: 15px; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; color: #fff;">
+            <div style="font-size: 12px; color: #a0a0a0; margin-bottom: 8px;">📊 資料庫統計</div>
+            <div style="font-size: 24px; color: #00D4AA; font-weight: bold;">{db_stats['total']:,}</div>
+            <div style="font-size: 11px; color: #a0a0a0; margin-top: 5px;">筆記錄</div>
         </div>
         """, unsafe_allow_html=True)
     
     with col2:
-        delete_mode = st.radio(
-            "選擇刪除範圍",
-            ["刪除特定日期", "刪除全部虛構測試資料"],
-            horizontal=True
-        )
-    
-    # 刪除選項
-    if delete_mode == "刪除特定日期":
-        col_date1, col_date2 = st.columns(2)
-        with col_date1:
-            delete_start = st.date_input("從日期（含）", datetime.now() - timedelta(days=90))
-        with col_date2:
-            delete_end = st.date_input("到日期（含）", datetime.now())
-        
-        if st.button("⚠️ 刪除指定日期範圍", use_container_width=True):
-            confirm = st.checkbox("✅ 我已確認要刪除，請輸入「確認」", value=False, key="confirm_delete_range")
-            if confirm:
-                with st.spinner("刪除中..."):
-                    deleted = delete_stream_logs(
-                        start_date=delete_start.strftime("%Y-%m-%d"),
-                        end_date=delete_end.strftime("%Y-%m-%d")
-                    )
-                st.success(f"✅ 已刪除 {deleted:,} 筆記錄")
-                st.rerun()
-            else:
-                st.warning("⚠️ 請先勾選確認方塊")
-    else:
-        st.warning("🔴 危險操作：刪除後無法恢復！")
-        
-        col_danger1, col_danger2 = st.columns(2)
-        with col_danger1:
-            st.text_input("輸入「確認刪除」", key="delete_confirm_text", placeholder="請輸入")
-        with col_danger2:
-            st.caption(" ")
-            if st.button("🗑️ 執行刪除", use_container_width=True, type="primary"):
-                if st.session_state.get('delete_confirm_text') == "確認刪除":
-                    with st.spinner("刪除中..."):
-                        deleted = delete_stream_logs()
-                    st.success(f"✅ 已刪除全部 {deleted:,} 筆記錄")
-                    st.rerun()
-                else:
-                    st.error("❌ 輸入不正确，請輸入「確認刪除」")
+        st.markdown(f"""
+        <div style="padding: 15px; background: linear-gradient(135deg, #16213e 0%, #0f3460 100%); border-radius: 12px; color: #fff;">
+            <div style="font-size: 12px; color: #a0a0a0; margin-bottom: 8px;">📅 資料時間範圍</div>
+            <div style="font-size: 14px; color: #fff; margin-top: 5px;">
+                {db_stats['earliest'][:10] if db_stats['earliest'] else 'N/A'}<br>
+                ~<br>
+                {db_stats['latest'][:10] if db_stats['latest'] else 'N/A'}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ============================================================
 # 頁面 2: 維修記錄

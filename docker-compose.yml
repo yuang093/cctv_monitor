@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  cctv-streamlit:
+    build: .
+    container_name: cctv-monitor
+    restart: always
+    ports:
+      - "8501:8501"
+    volumes:
+      # 掛載本地資料庫目錄 (持久化)
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  default:
+    name: cctv-network

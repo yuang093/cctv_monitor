@@ -72,6 +72,24 @@ def init_database():
             CREATE INDEX IF NOT EXISTS idx_stream_logs_server 
             ON stream_logs(server_ip)
         """)
+        
+        # 複合索引優化：時間範圍 + 伺服器名稱（常見查詢模式）
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_stream_logs_time_server 
+            ON stream_logs(timestamp, server_name)
+        """)
+        
+        # 複合索引優化：伺服器 + 時間（用於 GROUP BY 統計）
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_stream_logs_server_time 
+            ON stream_logs(server_name, timestamp)
+        """)
+        
+        # 複合索引優化：唯一約束 (timestamp + server_name) 防止重複寫入
+        cursor.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_stream_logs_unique 
+            ON stream_logs(timestamp, server_name)
+        """)
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_maintenance_status 
             ON maintenance_records(status)
@@ -81,12 +99,12 @@ def init_database():
 
 
 def insert_stream_log(timestamp: str, server_ip: str, server_name: str, stream_count: int):
-    """寫入一筆串流記錄"""
+    """寫入一筆串流記錄（若重複則忽略）"""
     with get_cursor() as cursor:
         cursor.execute("""
-            INSERT INTO stream_logs (timestamp, server_ip, server_name, stream_count)
+            INSERT OR IGNORE INTO stream_logs (timestamp, server_ip, server_name, stream_count)
             VALUES (?, ?, ?, ?)
-        """, (timestamp, server_ip, server_name, stream_count))
+        """, (timestamp, server_ip, server_name.strip(), stream_count))
 
 
 def insert_maintenance_record(
@@ -314,6 +332,49 @@ def get_available_periods() -> list:
             ORDER BY year DESC, quarter DESC
         """)
         return cursor.fetchall()
+
+
+def delete_stream_logs(start_date: str = None, end_date: str = None) -> int:
+    """
+    刪除指定時間範圍內的串流記錄
+    
+    Args:
+        start_date: 開始日期 (YYYY-MM-DD)，None 表示不限制
+        end_date: 結束日期 (YYYY-MM-DD)，None 表示不限制
+    
+    Returns:
+        刪除的記錄數
+    """
+    with get_cursor() as cursor:
+        if start_date and end_date:
+            cursor.execute("""
+                DELETE FROM stream_logs 
+                WHERE timestamp >= ? AND timestamp <= ?
+            """, (start_date, end_date + " 23:59:59"))
+        elif start_date:
+            cursor.execute("DELETE FROM stream_logs WHERE timestamp >= ?", (start_date,))
+        elif end_date:
+            cursor.execute("DELETE FROM stream_logs WHERE timestamp <= ?", (end_date + " 23:59:59",))
+        else:
+            cursor.execute("DELETE FROM stream_logs")
+        
+        return cursor.rowcount
+
+
+def get_record_count() -> dict:
+    """取得資料庫記錄統計"""
+    with get_cursor() as cursor:
+        cursor.execute("SELECT COUNT(*) as total FROM stream_logs")
+        total = cursor.fetchone()['total']
+        
+        cursor.execute("SELECT MIN(timestamp) as earliest, MAX(timestamp) as latest FROM stream_logs")
+        row = cursor.fetchone()
+        
+        return {
+            'total': total,
+            'earliest': row['earliest'],
+            'latest': row['latest']
+        }
 
 
 if __name__ == "__main__":

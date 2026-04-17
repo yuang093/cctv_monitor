@@ -27,9 +27,75 @@ st.set_page_config(
 # ============================================================
 # 側邊欄
 # ============================================================
-st.sidebar.markdown("## 📹 CCTV 監控系統")
-st.sidebar.markdown("**桃園國際機場**")
+# Logo 和標題區
+st.sidebar.markdown("""
+<div style="
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border-radius: 12px;
+    padding: 20px 15px;
+    text-align: center;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+">
+    <div style="font-size: 48px; margin-bottom: 8px;">📹</div>
+    <div style="color: #00D4AA; font-size: 18px; font-weight: bold;">CCTV 監控系統</div>
+    <div style="color: #a0a0a0; font-size: 12px;">桃園國際機場</div>
+</div>
+""", unsafe_allow_html=True)
+
 st.sidebar.divider()
+
+# 深色模式切換
+with st.sidebar.expander("⚙️ 顯示設定", expanded=False):
+    dark_mode = st.toggle("🌙 深色模式", value=False)
+
+# 應用深色主題
+if dark_mode:
+    st.markdown("""
+    <style>
+        body { background-color: #1a1a2e; color: #e0e0e0; }
+        .stApp { background-color: #1a1a2e; }
+        .stSidebar > div:first-child { background-color: #16213e; }
+        div[data-testid="stMetricValue"] { color: #00D4AA; }
+        div[data-testid="stMetricLabel"] { color: #a0a0a0; }
+        .stTabs [data-baseweb="tab-list"] { background-color: #16213e; }
+        .stTabs [data-baseweb="tab"] { color: #a0a0a0; }
+        .stTabs [aria-selected="true"] { color: #00D4AA !important; }
+        .st-dt { background-color: #16213e; }
+        div.st-aggrid { background-color: #1a1a2e; }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 系統狀態卡片
+try:
+    import os
+    db_path = "/Users/taeyeon093.bot/.openclaw/workspace/cctv_monitor/cctv_monitor.db"
+    if os.path.exists(db_path):
+        db_size = os.path.getsize(db_path) / (1024 * 1024)  # MB
+        db_size_str = f"{db_size:.1f} MB"
+    else:
+        db_size_str = "N/A"
+except:
+    db_size_str = "N/A"
+
+st.sidebar.markdown(f"""
+<div style="
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+">
+    <div style="color: #666; font-size: 10px; margin-bottom: 5px;">📊 系統狀態</div>
+    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+        <span>📦 資料庫:</span>
+        <span style="color: #00D4AA;">{db_size_str}</span>
+    </div>
+    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+        <span>🕐 現在:</span>
+        <span style="color: #666;">{datetime.now().strftime('%H:%M:%S')}</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 page = st.sidebar.radio(
     "📌 導航",
@@ -40,6 +106,19 @@ page = st.sidebar.radio(
 st.sidebar.divider()
 st.sidebar.caption(f"最後更新: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
+# 版本資訊
+st.sidebar.markdown("""
+<div style="
+    text-align: center;
+    color: #999;
+    font-size: 10px;
+    margin-top: 10px;
+">
+    v1.0.0 | OpenClaw CCTV Monitor<br>
+    <span style="color: #666;">© 2026 姜昱安</span>
+</div>
+""", unsafe_allow_html=True)
+
 # ============================================================
 # 頁面 1: 即時流量
 # ============================================================
@@ -47,32 +126,63 @@ if page == "📊 即時流量":
     st.title("📊 即時流量監控")
     st.caption("桃園國際機場 CCTV 串流系統")
     
-    # 時間範圍選擇
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        time_range = st.selectbox(
-            "⏰ 時間範圍",
-            ["最近 1 小時", "最近 6 小時", "最近 24 小時", "最近 7 天", "自訂範圍"],
-            index=2
-        )
+    # 時間範圍選擇 - 優化版（快速按鈕 + 下拉選單）
+    st.subheader("⏰ 時間範圍")
+    
+    # 快速按鈕列
+    quick_buttons = st.columns(5)
+    time_options = ["最近 1 小時", "最近 6 小時", "最近 24 小時", "最近 7 天", "自訂範圍"]
+    
+    # 根據選擇初始化
+    if 'time_range' not in st.session_state:
+        st.session_state['time_range'] = "最近 24 小時"
+    
+    selected_range_idx = time_options.index(st.session_state['time_range']) if st.session_state['time_range'] in time_options else 2
+    
+    for i, (btn, option) in enumerate(zip(quick_buttons, time_options)):
+        with btn:
+            if st.button(
+                option.replace("最近 ", "").replace(" 小時", "h").replace(" 天", "d"),
+                key=f"quick_btn_{i}",
+                use_container_width=True
+            ):
+                st.session_state['time_range'] = option
+                st.rerun()
+    
+    # 下拉選單（用於更細緻的選擇）
+    time_range = st.selectbox(
+        "或選擇精確範圍",
+        time_options,
+        index=selected_range_idx,
+        label_visibility="collapsed"
+    )
     
     # 根據選擇計算時間範圍
     now = datetime.now()
+    start_time = now
+    end_time = now
+    
     if time_range == "最近 1 小時":
         start_time = now - timedelta(hours=1)
+        end_time = now
     elif time_range == "最近 6 小時":
         start_time = now - timedelta(hours=6)
+        end_time = now
     elif time_range == "最近 24 小時":
         start_time = now - timedelta(days=1)
+        end_time = now
     elif time_range == "最近 7 天":
         start_time = now - timedelta(days=7)
+        end_time = now
     else:
         # 自訂範圍
-        with col1:
-            start_time = st.date_input("開始日期", now - timedelta(days=1))
-            end_time = st.date_input("結束日期", now)
-        start_time = datetime.combine(start_time, datetime.min.time())
-        end_time = datetime.combine(end_time, datetime.max.time())
+        col_custom1, col_custom2 = st.columns(2)
+        with col_custom1:
+            custom_start = st.date_input("開始日期", now - timedelta(days=1))
+            start_time = datetime.combine(custom_start, datetime.min.time())
+        with col_custom2:
+            custom_end = st.date_input("結束日期", now)
+            end_time = datetime.combine(custom_end, datetime.max.time())
     
     # 讀取資料
     @st.cache_data(ttl=60)  # 快取 60 秒
@@ -89,6 +199,8 @@ if page == "📊 即時流量":
         
         if not df.empty:
             df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df['server_name'] = df['server_name'].str.strip()  # 移除空白字元
+            df = df.drop_duplicates(subset=['timestamp', 'server_name'])  # 去重
         return df
     
     if time_range != "自訂範圍":
@@ -98,6 +210,24 @@ if page == "📊 即時流量":
         df = load_stream_data(start_time, end_time)
         actual_end = end_time
     
+    # 顯示資料筆數資訊
+    if not df.empty:
+        total_records = len(df)
+        unique_timestamps = df['timestamp'].nunique()
+        time_span = (df['timestamp'].max() - df['timestamp'].min()).total_seconds() / 3600
+        st.markdown(f"""
+        <div style="padding: 0.75rem 1rem; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 8px; margin: 1rem 0; color: #ffffff;">
+            📊 <strong>資料範圍:</strong> {start_time.strftime('%Y-%m-%d %H:%M')} ~ {actual_end.strftime('%Y-%m-%d %H:%M')}<br>
+            📝 <strong>總筆數:</strong> {total_records:,} 筆 (去重後) | ⏱️ <strong>時間戳:</strong> {unique_timestamps} 個 | ⏳ <strong>跨度:</strong> {time_span:.1f} 小時
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="padding: 0.75rem 1rem; background: linear-gradient(135deg, #533483 0%, #2c2c54 100%); border-radius: 8px; margin: 1rem 0; color: #ffffff;">
+            ⚠️ 目前時間範圍內沒有資料
+        </div>
+        """, unsafe_allow_html=True)
+    
     # 顯示統計卡片
     st.divider()
     col1, col2, col3, col4 = st.columns(4)
@@ -106,22 +236,42 @@ if page == "📊 即時流量":
     latest_data = df[df['timestamp'] == df['timestamp'].max()] if not df.empty else pd.DataFrame()
     total_streams = latest_data['stream_count'].sum() if not latest_data.empty else 0
     
-    with col1:
-        st.metric("🏢 伺服器數", total_servers)
-    with col2:
-        st.metric("📹 總串流數", total_streams)
-    with col3:
-        if not df.empty:
-            max_stream = int(df.groupby('server_name')['stream_count'].max().sum())
-            min_stream = int(df.groupby('server_name')['stream_count'].min().sum())
-            st.metric("📈 最高串流", max_stream)
-        else:
-            st.metric("📈 最高串流", "N/A")
-    with col4:
-        if not df.empty:
-            st.metric("📉 最低串流", min_stream)
-        else:
-            st.metric("📉 最低串流", "N/A")
+    # 計算統計數值
+    if not df.empty:
+        max_stream = int(df.groupby('server_name')['stream_count'].max().sum())
+        min_stream = int(df.groupby('server_name')['stream_count'].min().sum())
+    else:
+        max_stream = "N/A"
+        min_stream = "N/A"
+    
+    # 統一卡片樣式
+    def render_kpi_card(icon, title, value, color="#1a1a2e"):
+        return f"""
+        <div style="
+            background: linear-gradient(135deg, {color} 0%, {color}dd 100%);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin: 5px;
+        ">
+            <div style="font-size: 28px; margin-bottom: 8px;">{icon}</div>
+            <div style="color: #a0a0a0; font-size: 12px; margin-bottom: 4px;">{title}</div>
+            <div style="color: #00D4AA; font-size: 28px; font-weight: bold;">{value}</div>
+        </div>
+        """
+    
+    # 並排顯示四個 KPI 卡片
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    
+    with kpi1:
+        st.markdown(render_kpi_card("🏢", "伺服器數", total_servers, "#1a1a2e"), unsafe_allow_html=True)
+    with kpi2:
+        st.markdown(render_kpi_card("📹", "總串流數", total_streams, "#16213e"), unsafe_allow_html=True)
+    with kpi3:
+        st.markdown(render_kpi_card("📈", "最高串流", max_stream, "#0f3460"), unsafe_allow_html=True)
+    with kpi4:
+        st.markdown(render_kpi_card("📉", "最低串流", min_stream, "#533483"), unsafe_allow_html=True)
     
     st.divider()
     
@@ -246,6 +396,71 @@ if page == "📊 即時流量":
             st.caption(f"共 {len(export_df)} 筆記錄")
     else:
         st.info("目前時間範圍內無資料可匯出")
+    
+    st.divider()
+    
+    # 刪除記錄功能
+    st.subheader("🗑️ 資料管理")
+    
+    # 取得資料庫統計
+    from database import get_record_count, delete_stream_logs
+    db_stats = get_record_count()
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.markdown(f"""
+        <div style="padding: 10px; background: #2c2c54; border-radius: 8px; color: #fff;">
+            <div style="font-size: 11px; color: #a0a0a0;">📊 資料庫統計</div>
+            <div style="font-size: 14px; margin-top: 5px;">總記錄: <strong style="color: #00D4AA;">{db_stats['total']:,}</strong> 筆</div>
+            <div style="font-size: 10px; color: #a0a0a0; margin-top: 3px;">
+                時間範圍: {db_stats['earliest'][:10] if db_stats['earliest'] else 'N/A'} ~ {db_stats['latest'][:10] if db_stats['latest'] else 'N/A'}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        delete_mode = st.radio(
+            "選擇刪除範圍",
+            ["刪除特定日期", "刪除全部虛構測試資料"],
+            horizontal=True
+        )
+    
+    # 刪除選項
+    if delete_mode == "刪除特定日期":
+        col_date1, col_date2 = st.columns(2)
+        with col_date1:
+            delete_start = st.date_input("從日期（含）", datetime.now() - timedelta(days=90))
+        with col_date2:
+            delete_end = st.date_input("到日期（含）", datetime.now())
+        
+        if st.button("⚠️ 刪除指定日期範圍", use_container_width=True):
+            confirm = st.checkbox("✅ 我已確認要刪除，請輸入「確認」", value=False, key="confirm_delete_range")
+            if confirm:
+                with st.spinner("刪除中..."):
+                    deleted = delete_stream_logs(
+                        start_date=delete_start.strftime("%Y-%m-%d"),
+                        end_date=delete_end.strftime("%Y-%m-%d")
+                    )
+                st.success(f"✅ 已刪除 {deleted:,} 筆記錄")
+                st.rerun()
+            else:
+                st.warning("⚠️ 請先勾選確認方塊")
+    else:
+        st.warning("🔴 危險操作：刪除後無法恢復！")
+        
+        col_danger1, col_danger2 = st.columns(2)
+        with col_danger1:
+            st.text_input("輸入「確認刪除」", key="delete_confirm_text", placeholder="請輸入")
+        with col_danger2:
+            st.caption(" ")
+            if st.button("🗑️ 執行刪除", use_container_width=True, type="primary"):
+                if st.session_state.get('delete_confirm_text') == "確認刪除":
+                    with st.spinner("刪除中..."):
+                        deleted = delete_stream_logs()
+                    st.success(f"✅ 已刪除全部 {deleted:,} 筆記錄")
+                    st.rerun()
+                else:
+                    st.error("❌ 輸入不正确，請輸入「確認刪除」")
 
 # ============================================================
 # 頁面 2: 維修記錄
@@ -367,37 +582,66 @@ elif page == "📈 串流使用分析報告":
                 # 取得季度統計
                 stats = get_quarterly_stats(selected_year, selected_quarter)
                 
-                # 顯示季度卡片
+                # 顯示季度統一卡片
                 st.divider()
                 st.subheader(f"📅 {selected_year} 年 第 {selected_quarter} 季度")
                 
-                col1, col2, col3 = st.columns(3)
+                # 計算可用率顏色
+                avail_value = stats['availability']
+                if avail_value >= 95:
+                    avail_icon, avail_color = "🟢", "#4CAF50"
+                elif avail_value >= 85:
+                    avail_icon, avail_color = "🟡", "#FFC107"
+                else:
+                    avail_icon, avail_color = "🔴", "#f44336"
                 
-                with col1:
-                    # 系統可用率卡片
-                    avail_color = "🟢" if stats['availability'] >= 95 else "🟡" if stats['availability'] >= 85 else "🔴"
-                    st.metric(
-                        f"{avail_color} 系統可用率",
-                        f"{stats['availability']:.1f}%",
-                        help=f"成功抓取 {stats['fetch_count']} 次 / 預期 {stats['total_expected']} 次"
-                    )
+                top_server_name = stats['top_servers'][0]['server_name'].strip() if stats['top_servers'] else "N/A"
+                top_server_count = stats['top_servers'][0]['avg_count'] if stats['top_servers'] else 0
                 
-                with col2:
-                    st.metric(
-                        "📊 平均串流負載",
+                # 統一報告卡片樣式
+                def render_report_card(icon, title, value, subtitle="", bg_color="#1a1a2e"):
+                    return f"""
+                    <div style="
+                        background: linear-gradient(135deg, {bg_color} 0%, {bg_color}cc 100%);
+                        border-radius: 12px;
+                        padding: 20px;
+                        text-align: center;
+                        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        margin: 5px;
+                        min-height: 100px;
+                    ">
+                        <div style="font-size: 24px; margin-bottom: 8px;">{icon}</div>
+                        <div style="color: #a0a0a0; font-size: 11px; margin-bottom: 4px;">{title}</div>
+                        <div style="color: #00D4AA; font-size: 22px; font-weight: bold;">{value}</div>
+                        <div style="color: #888; font-size: 10px;">{subtitle}</div>
+                    </div>
+                    """
+                
+                rcol1, rcol2, rcol3 = st.columns(3)
+                with rcol1:
+                    st.markdown(render_report_card(
+                        avail_icon, 
+                        "系統可用率", 
+                        f"{avail_value:.1f}%",
+                        f"抓取 {stats['fetch_count']:,} / {stats['total_expected']:,}",
+                        avail_color
+                    ), unsafe_allow_html=True)
+                with rcol2:
+                    st.markdown(render_report_card(
+                        "📊", 
+                        "平均串流負載", 
                         f"{stats['avg_load']:.1f}",
-                        help=f"總串流數: {stats['total_streams']:,}"
-                    )
-                
-                with col3:
-                    if stats['top_servers']:
-                        top_name = stats['top_servers'][0]['server_name'].strip()
-                        top_count = stats['top_servers'][0]['avg_count']
-                        st.metric(
-                            "🏆 最高負載伺服器",
-                            top_name,
-                            help=f"平均 {top_count:.1f} 串流"
-                        )
+                        f"總串流數: {stats['total_streams']:,}",
+                        "#16213e"
+                    ), unsafe_allow_html=True)
+                with rcol3:
+                    st.markdown(render_report_card(
+                        "🏆", 
+                        "最高負載伺服器", 
+                        top_server_name,
+                        f"平均 {top_server_count:.1f} 串流",
+                        "#0f3460"
+                    ), unsafe_allow_html=True)
                 
                 st.divider()
                 
@@ -532,6 +776,63 @@ elif page == "📈 串流使用分析報告":
                                     &nbsp;&nbsp; 平均 {server['avg_count']:.1f} 串流
                                 </div>
                                 """, unsafe_allow_html=True)
+    
+    # PDF 匯出功能
+    st.divider()
+    st.subheader("💾 匯出 PDF 報表")
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        pdf_report_type = st.radio(
+            "選擇報告類型",
+            ["季度報告", "月度報告"],
+            horizontal=True,
+            key="pdf_report_type"
+        )
+    
+    with col2:
+        if pdf_report_type == "季度報告":
+            # 季度 PDF
+            if 'quarters_with_data' in dir() and quarters_with_data:
+                pdf_year = selected_year
+                pdf_quarter = selected_quarter
+                
+                if st.button("📥 下載季度 PDF 報表", use_container_width=True):
+                    try:
+                        from pdf_generator import generate_quarterly_pdf
+                        with st.spinner("產生 PDF 中..."):
+                            pdf_bytes = generate_quarterly_pdf(pdf_year, pdf_quarter)
+                        st.success(f"✅ PDF 產生成功 ({len(pdf_bytes):,} bytes)")
+                        st.download_button(
+                            label="📥 點擊下載",
+                            data=pdf_bytes,
+                            file_name=f"CCTV_Report_{pdf_year}_Q{pdf_quarter}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"❌ PDF 產生失敗: {e}")
+        else:
+            # 月度 PDF
+            if 'months_sorted' in dir() and months_sorted:
+                pdf_year = selected_year
+                pdf_month = selected_month
+                
+                if st.button("📥 下載月度 PDF 報表", use_container_width=True):
+                    try:
+                        from pdf_generator import generate_monthly_pdf
+                        with st.spinner("產生 PDF 中..."):
+                            pdf_bytes = generate_monthly_pdf(pdf_year, pdf_month)
+                        st.success(f"✅ PDF 產生成功 ({len(pdf_bytes):,} bytes)")
+                        st.download_button(
+                            label="📥 點擊下載",
+                            data=pdf_bytes,
+                            file_name=f"CCTV_Report_{pdf_year}_{pdf_month:02d}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"❌ PDF 產生失敗: {e}")
     
     # 底部說明
     st.divider()

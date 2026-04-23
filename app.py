@@ -38,8 +38,7 @@ st.sidebar.markdown("""
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 ">
     <div style="font-size: 48px; margin-bottom: 8px;">📹</div>
-    <div style="color: #00D4AA; font-size: 18px; font-weight: bold;">CCTV 監控系統</div>
-    <div style="color: #a0a0a0; font-size: 12px;">桃園國際機場</div>
+    <div style="color: #00D4AA; font-size: 18px; font-weight: bold;">CCTV 廣播系統</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -69,7 +68,10 @@ if dark_mode:
 # 系統狀態卡片
 try:
     import os
-    db_path = "/Users/taeyeon093.bot/.openclaw/workspace/cctv_monitor/cctv_monitor.db"
+    from datetime import timezone, timedelta
+    # 容器內路徑
+    db_path = "/app/cctv_monitor.db"
+    tz_taipei = timezone(timedelta(hours=8))
     if os.path.exists(db_path):
         db_size = os.path.getsize(db_path) / (1024 * 1024)  # MB
         db_size_str = f"{db_size:.1f} MB"
@@ -80,19 +82,20 @@ except:
 
 st.sidebar.markdown(f"""
 <div style="
-    background: #f8f9fa;
+    background: #e8ecef;
     border-radius: 8px;
     padding: 12px;
     margin: 10px 0;
+    border: 1px solid #d0d7de;
 ">
-    <div style="color: #666; font-size: 10px; margin-bottom: 5px;">📊 系統狀態</div>
-    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+    <div style="color: #333; font-size: 11px; margin-bottom: 8px; font-weight: bold;">📊 系統狀態</div>
+    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #333; margin-bottom: 4px;">
         <span>📦 資料庫:</span>
-        <span style="color: #00D4AA;">{db_size_str}</span>
+        <span style="color: #0055AA; font-weight: bold;">{db_size_str}</span>
     </div>
-    <div style="display: flex; justify-content: space-between; font-size: 11px;">
+    <div style="display: flex; justify-content: space-between; font-size: 12px; color: #333;">
         <span>🕐 現在:</span>
-        <span style="color: #666;">{datetime.now().strftime('%H:%M:%S')}</span>
+        <span style="color: #333; font-weight: bold;">{datetime.now().astimezone(tz_taipei).strftime('%H:%M:%S')}</span>
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -114,7 +117,7 @@ st.sidebar.markdown("""
     font-size: 10px;
     margin-top: 10px;
 ">
-    v1.0.0 | OpenClaw CCTV Monitor<br>
+    v1.9.3 | 廣播串流分析平台<br>
     <span style="color: #666;">© 2026 姜昱安</span>
 </div>
 """, unsafe_allow_html=True)
@@ -124,32 +127,29 @@ st.sidebar.markdown("""
 # ============================================================
 if page == "📊 即時流量":
     st.title("📊 即時流量監控")
-    st.caption("桃園國際機場 CCTV 串流系統")
+    st.caption("桃園機場 CCTV 廣播串流分析系統")
     
-    # 時間範圍選擇 - 優化版（快速按鈕 + 下拉選單）
+    # 時間範圍選擇
     st.subheader("⏰ 時間範圍")
     
-    # 快速按鈕列
-    quick_buttons = st.columns(5)
-    time_options = ["最近 1 小時", "最近 6 小時", "最近 24 小時", "最近 7 天", "自訂範圍"]
+    time_options = ["24hr", "7day", "1M", "3M", "自訂範圍"]
     
-    # 根據選擇初始化
     if 'time_range' not in st.session_state:
-        st.session_state['time_range'] = "最近 24 小時"
+        st.session_state['time_range'] = "24hr"
     
-    selected_range_idx = time_options.index(st.session_state['time_range']) if st.session_state['time_range'] in time_options else 2
+    selected_range_idx = time_options.index(st.session_state['time_range']) if st.session_state['time_range'] in time_options else 0
     
-    for i, (btn, option) in enumerate(zip(quick_buttons, time_options)):
-        with btn:
+    col_btn1, col_btn2, col_btn3, col_btn4, col_btn5 = st.columns(5)
+    for i, (col, option) in enumerate(zip([col_btn1, col_btn2, col_btn3, col_btn4, col_btn5], time_options)):
+        with col:
             if st.button(
-                option.replace("最近 ", "").replace(" 小時", "h").replace(" 天", "d"),
+                option,
                 key=f"quick_btn_{i}",
                 use_container_width=True
             ):
                 st.session_state['time_range'] = option
                 st.rerun()
     
-    # 下拉選單（用於更細緻的選擇）
     time_range = st.selectbox(
         "或選擇精確範圍",
         time_options,
@@ -162,17 +162,17 @@ if page == "📊 即時流量":
     start_time = now
     end_time = now
     
-    if time_range == "最近 1 小時":
-        start_time = now - timedelta(hours=1)
+    if time_range == "24hr":
+        start_time = now - timedelta(hours=24)
         end_time = now
-    elif time_range == "最近 6 小時":
-        start_time = now - timedelta(hours=6)
-        end_time = now
-    elif time_range == "最近 24 小時":
-        start_time = now - timedelta(days=1)
-        end_time = now
-    elif time_range == "最近 7 天":
+    elif time_range == "7day":
         start_time = now - timedelta(days=7)
+        end_time = now
+    elif time_range == "1M":
+        start_time = now - timedelta(days=30)
+        end_time = now
+    elif time_range == "3M":
+        start_time = now - timedelta(days=90)
         end_time = now
     else:
         # 自訂範圍
@@ -203,12 +203,12 @@ if page == "📊 即時流量":
             df = df.drop_duplicates(subset=['timestamp', 'server_name'])  # 去重
         return df
     
+    actual_end = end_time if time_range == "自訂範圍" else now
+    
     if time_range != "自訂範圍":
-        df = load_stream_data(start_time, start_time + (now - start_time))
-        actual_end = now
+        df = load_stream_data(start_time, end_time)
     else:
         df = load_stream_data(start_time, end_time)
-        actual_end = end_time
     
     # 顯示資料筆數資訊
     if not df.empty:
@@ -381,11 +381,12 @@ if page == "📊 即時流量":
         export_df['timestamp'] = export_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
         export_df['server_name'] = export_df['server_name'].str.strip()
         
+        # 新增：匯出按鈕（上方選擇的時間範圍）
         col1, col2 = st.columns([1, 3])
         with col1:
             csv_data = export_df.to_csv(index=False, encoding='utf-8-sig')
             st.download_button(
-                label="📥 下載 CSV",
+                label="📥 下載所選範圍 CSV",
                 data=csv_data,
                 file_name=f"cctv_stream_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
@@ -393,7 +394,48 @@ if page == "📊 即時流量":
             )
         
         with col2:
-            st.caption(f"共 {len(export_df)} 筆記錄")
+            st.caption(f"所選範圍：共 {len(export_df)} 筆記錄")
+        
+        # 新增：匯出全部資料按鈕
+        st.divider()
+        col_all1, col_all2 = st.columns([1, 3])
+        with col_all1:
+            if st.button("📥 匯出全部資料（CSV）", use_container_width=True):
+                with st.spinner("正在匯出全部資料..."):
+                    try:
+                        conn = get_connection()
+                        query_all = """
+                            SELECT timestamp, server_name, stream_count
+                            FROM stream_logs
+                            ORDER BY timestamp ASC
+                        """
+                        df_all = pd.read_sql_query(query_all, conn)
+                        conn.close()
+                        
+                        if not df_all.empty:
+                            df_all['timestamp'] = pd.to_datetime(df_all['timestamp'])
+                            df_all['server_name'] = df_all['server_name'].str.strip()
+                            
+                            all_export_df = df_all.copy()
+                            all_export_df['timestamp'] = all_export_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            csv_all_data = all_export_df.to_csv(index=False, encoding='utf-8-sig')
+                            st.download_button(
+                                label=f"📥 下載全部資料（共 {len(all_export_df)} 筆）",
+                                data=csv_all_data,
+                                file_name=f"cctv_stream_logs_ALL_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv",
+                                use_container_width=True,
+                                key="download_all_csv"
+                            )
+                            st.success(f"✅ 查到 {len(all_export_df)} 筆記錄，點擊上方按鈕下載")
+                        else:
+                            st.warning("⚠️ 資料庫中沒有任何資料")
+                    except Exception as e:
+                        st.error(f"❌ 匯出失敗: {e}")
+        
+        with col_all2:
+            st.caption("📌 匯出資料庫中的全部記錄，不受時間範圍限制")
     else:
         st.info("目前時間範圍內無資料可匯出")
     
@@ -508,7 +550,7 @@ elif page == "📈 串流使用分析報告":
     st.title("📈 串流使用分析報告")
     st.caption("CCTV 串流系統月報/季報分析")
     
-    from database import get_monthly_stats, get_quarterly_stats, get_available_periods
+    from database import get_monthly_stats, get_quarterly_stats, get_available_periods, get_utilization_status, get_server_utilization
     
     # 報告類型切換
     report_type = st.radio(
@@ -551,14 +593,9 @@ elif page == "📈 串流使用分析報告":
                 st.divider()
                 st.subheader(f"📅 {selected_year} 年 第 {selected_quarter} 季度")
                 
-                # 計算可用率顏色
-                avail_value = stats['availability']
-                if avail_value >= 95:
-                    avail_icon, avail_color = "🟢", "#4CAF50"
-                elif avail_value >= 85:
-                    avail_icon, avail_color = "🟡", "#FFC107"
-                else:
-                    avail_icon, avail_color = "🔴", "#f44336"
+                # 計算使用率狀態
+                current_streams = stats.get('current_streams', 0) or 0
+                util_status = get_utilization_status(current_streams)
                 
                 top_server_name = stats['top_servers'][0]['server_name'].strip() if stats['top_servers'] else "N/A"
                 top_server_count = stats['top_servers'][0]['avg_count'] if stats['top_servers'] else 0
@@ -577,7 +614,7 @@ elif page == "📈 串流使用分析報告":
                     ">
                         <div style="font-size: 24px; margin-bottom: 8px;">{icon}</div>
                         <div style="color: #a0a0a0; font-size: 11px; margin-bottom: 4px;">{title}</div>
-                        <div style="color: #00D4AA; font-size: 22px; font-weight: bold;">{value}</div>
+                        <div style="color: {util_status['color']}; font-size: 22px; font-weight: bold;">{value}</div>
                         <div style="color: #888; font-size: 10px;">{subtitle}</div>
                     </div>
                     """
@@ -585,11 +622,11 @@ elif page == "📈 串流使用分析報告":
                 rcol1, rcol2, rcol3 = st.columns(3)
                 with rcol1:
                     st.markdown(render_report_card(
-                        avail_icon, 
-                        "系統可用率", 
-                        f"{avail_value:.1f}%",
-                        f"抓取 {stats['fetch_count']:,} / {stats['total_expected']:,}",
-                        avail_color
+                        util_status['icon'], 
+                        "系統使用率", 
+                        f"{util_status['utilization']:.1f}%",
+                        util_status['label'],
+                        "#1a1a2e"
                     ), unsafe_allow_html=True)
                 with rcol2:
                     st.markdown(render_report_card(
@@ -637,10 +674,13 @@ elif page == "📈 串流使用分析報告":
                 monthly_data = []
                 for month in stats['months']:
                     m_stats = get_monthly_stats(selected_year, month)
+                    current_streams = m_stats.get('current_streams', 0) or 0
+                    util_status = get_utilization_status(current_streams)
                     monthly_data.append({
                         '月份': f"{month}月",
-                        '可用率': m_stats['availability'],
-                        '平均負載': m_stats['avg_load']
+                        '使用率(%)': util_status['utilization'],
+                        '平均負載': m_stats['avg_load'],
+                        '使用率標籤': util_status['label']
                     })
                 
                 if monthly_data:
@@ -650,15 +690,16 @@ elif page == "📈 串流使用分析報告":
                     fig = go.Figure()
                     fig.add_trace(go.Bar(
                         x=df_monthly['月份'],
-                        y=df_monthly['平均負載'],
-                        name='平均負載',
+                        y=df_monthly['使用率(%)'],
+                        name='使用率',
                         marker_color='#00D4AA'
                     ))
                     fig.update_layout(
-                        title="各月平均串流負載",
+                        title="各月系統使用率",
                         template="plotly_white",
                         height=300,
-                        showlegend=False
+                        showlegend=False,
+                        yaxis_title="使用率 (%)"
                     )
                     st.plotly_chart(fig, use_container_width=True)
         
@@ -694,14 +735,17 @@ elif page == "📈 串流使用分析報告":
                     st.divider()
                     st.subheader(f"📅 {selected_year} 年 {selected_month} 月")
                     
+                    # 計算使用率狀態
+                    current_streams = stats.get('current_streams', 0) or 0
+                    util_status = get_utilization_status(current_streams)
+                    
                     col1, col2, col3 = st.columns(3)
                     
                     with col1:
-                        avail_color = "🟢" if stats['availability'] >= 95 else "🟡" if stats['availability'] >= 85 else "🔴"
                         st.metric(
-                            f"{avail_color} 系統可用率",
-                            f"{stats['availability']:.1f}%",
-                            help=f"成功抓取 {stats['fetch_count']} 次 / 預期 {stats['total_expected']} 次"
+                            f"{util_status['icon']} 系統使用率",
+                            f"{util_status['utilization']:.1f}%",
+                            help=f"{util_status['label']} (容量 700 Channels)"
                         )
                     
                     with col2:
@@ -742,22 +786,17 @@ elif page == "📈 串流使用分析報告":
                                 </div>
                                 """, unsafe_allow_html=True)
     
-    # PDF 匯出功能
+    # PDF 匯出功能 (根據上方的 report_type 自動顯示對應選項，不重複選擇)
     st.divider()
     st.subheader("💾 匯出 PDF 報表")
-    
+
     col1, col2 = st.columns([1, 2])
     with col1:
-        pdf_report_type = st.radio(
-            "選擇報告類型",
-            ["季度報告", "月度報告"],
-            horizontal=True,
-            key="pdf_report_type"
-        )
+        st.write(f"📄 報告類型：**{'季度' if report_type == '季度報告' else '月度'}報告**")
     
     with col2:
-        if pdf_report_type == "季度報告":
-            # 季度 PDF
+        if report_type == "季度報告":
+            # 季度 PDF（僅在選擇季度報告時顯示）
             if 'quarters_with_data' in dir() and quarters_with_data:
                 pdf_year = selected_year
                 pdf_quarter = selected_quarter
@@ -777,11 +816,16 @@ elif page == "📈 串流使用分析報告":
                         )
                     except Exception as e:
                         st.error(f"❌ PDF 產生失敗: {e}")
+            else:
+                st.info("ℹ️ 請先在上方選擇有資料的年份與季度")
         else:
-            # 月度 PDF
-            if 'months_sorted' in dir() and months_sorted:
+            # 月度 PDF（僅在選擇月度報告時顯示）
+            if 'selected_year' in dir() and selected_year:
                 pdf_year = selected_year
-                pdf_month = selected_month
+                try:
+                    pdf_month = int(selected_month) if 'selected_month' in dir() and selected_month else 1
+                except:
+                    pdf_month = 1
                 
                 if st.button("📥 下載月度 PDF 報表", use_container_width=True):
                     try:

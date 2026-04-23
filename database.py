@@ -225,7 +225,19 @@ def get_monthly_stats(year: int, month: int) -> dict:
         avg_load = result['avg_load'] or 0
         total_streams = result['total_streams'] or 0
         
-        # 4. 各伺服器平均串流 (用於 TOP 3)
+        # 4. 最新串流數 (用於使用率計算) - 取該季度最後一個時間點的所有伺服器串流總和
+        cursor.execute("""
+            SELECT SUM(s.stream_count) as current_streams
+            FROM stream_logs s
+            INNER JOIN (
+                SELECT MAX(timestamp) as max_ts FROM stream_logs
+                WHERE timestamp >= ? AND timestamp < ?
+            ) latest ON s.timestamp = latest.max_ts
+        """, (start_date, end_date))
+        current_result = cursor.fetchone()
+        current_streams = current_result['current_streams'] if current_result else 0
+        
+        # 5. 各伺服器平均串流 (用於 TOP 3)
         cursor.execute("""
             SELECT server_name, AVG(stream_count) as avg_count
             FROM stream_logs 
@@ -236,7 +248,7 @@ def get_monthly_stats(year: int, month: int) -> dict:
         """, (start_date, end_date))
         top_servers = cursor.fetchall()
         
-        # 5. 總案件數 (視為抓取次數)
+        # 6. 總案件數 (視為抓取次數)
         cursor.execute("""
             SELECT COUNT(DISTINCT case_number) as total_cases
             FROM maintenance_records
@@ -250,6 +262,7 @@ def get_monthly_stats(year: int, month: int) -> dict:
             'availability': availability,
             'avg_load': avg_load,
             'total_streams': total_streams,
+            'current_streams': current_streams,
             'top_servers': top_servers,
             'total_expected': int(total_expected)
         }
@@ -292,7 +305,19 @@ def get_quarterly_stats(year: int, quarter: int) -> dict:
         avg_load = result['avg_load'] or 0
         total_streams = result['total_streams'] or 0
         
-        # 4. TOP 3 伺服器
+        # 4. 最新串流數 (用於使用率計算)
+        cursor.execute("""
+            SELECT SUM(s.stream_count) as current_streams
+            FROM stream_logs s
+            INNER JOIN (
+                SELECT MAX(timestamp) as max_ts FROM stream_logs
+                WHERE timestamp >= ? AND timestamp < ?
+            ) latest ON s.timestamp = latest.max_ts
+        """, (start_date, end_date))
+        current_result = cursor.fetchone()
+        current_streams = current_result['current_streams'] if current_result else 0
+        
+        # 5. TOP 3 伺服器
         cursor.execute("""
             SELECT server_name, AVG(stream_count) as avg_count
             FROM stream_logs 
@@ -310,6 +335,7 @@ def get_quarterly_stats(year: int, quarter: int) -> dict:
             'availability': availability,
             'avg_load': avg_load,
             'total_streams': total_streams,
+            'current_streams': current_streams,
             'top_servers': top_servers,
             'total_expected': int(total_expected),
             'months': list(range(start_month, end_month + 1))
@@ -375,6 +401,92 @@ def get_record_count() -> dict:
             'earliest': row['earliest'],
             'latest': row['latest']
         }
+
+
+def get_utilization_status(current_usage: float) -> dict:
+    """
+    計算使用率狀態（統一的計算邏輯）
+    
+    總容量：700 Channels (7台伺服器 × 100 ch)
+    
+    Returns:
+        dict with keys: utilization (float %), label (str), color (str), icon (str)
+    """
+    utilization = (current_usage / 700) * 100 if current_usage is not None else 0
+    
+    if utilization <= 20:
+        label = "低度負載"
+        color = "#4CAF50"
+        icon = "🟢"
+    elif utilization <= 40:
+        label = "運作順暢"
+        color = "#2196F3"
+        icon = "🟢"
+    elif utilization <= 60:
+        label = "正常負載"
+        color = "#00D4AA"
+        icon = "🟡"
+    elif utilization <= 80:
+        label = "忙碌警示"
+        color = "#FF9800"
+        icon = "🟠"
+    else:
+        label = "滿載臨界"
+        color = "#f44336"
+        icon = "🔴"
+    
+    return {
+        "utilization": utilization,
+        "label": label,
+        "color": color,
+        "icon": icon
+    }
+
+
+def get_server_utilization(server_name: str, year: int = None, quarter: int = None, month: int = None) -> dict:
+    """
+    計算指定伺服器的使用率
+    單台容量：100 Channels
+    """
+    if year and month:
+        start_date = f"{year}-{month:02d}-01"
+        if month == 12:
+            end_date = f"{year+1}-01-01"
+        else:
+            end_date = f"{year}-{month+1:02d}-01"
+    elif year and quarter:
+        month_map = {1: (1, 3), 2: (4, 6), 3: (7, 9), 4: (10, 12)}
+        sm, em = month_map[quarter]
+        start_date = f"{year}-{sm:02d}-01"
+        if em == 12:
+            end_date = f"{year+1}-01-01"
+        else:
+            end_date = f"{year}-{em+1:02d}-01"
+    else:
+        # 預設取過去 30 天
+        start_date = None
+        end_date = None
+    
+    with get_cursor() as cursor:
+        if start_date and end_date:
+            cursor.execute("""
+                SELECT AVG(stream_count) as avg_count
+                FROM stream_logs 
+                WHERE timestamp >= ? AND timestamp < ?
+                AND server_name = ?
+            """, (start_date, end_date, server_name))
+        else:
+            cursor.execute("""
+                SELECT AVG(stream_count) as avg_count
+                FROM stream_logs 
+                WHERE server_name = ?
+                AND timestamp >= date('now', '-30 days')
+            """, (server_name,))
+        
+        result = cursor.fetchone()
+        avg_count = result['avg_count'] if result else 0
+    
+    return get_utilization_status(avg_count)
 
 
 if __name__ == "__main__":
